@@ -6,7 +6,6 @@
 #include <OpenGL/gl.h>
 #include <GLUT/glut.h>
 #include <pthread.h>
-
 #include <gmp.h>
 
 int32_t sizeX;
@@ -83,17 +82,26 @@ void deletePixelList(pixelHeadPtr head) {
 		}
 		p = head->first;
 		free(p);
-		//		do {
-		//			pixelListPtr *n = &(*p)->next;
-		//			free(*p);
-		//			p = n;
-		//		} while((*p) != NULL);
 	}
 	head->first = NULL;
 	head->last = NULL;
-	//	free(head);
 }
 //###############Liste########################
+
+//################File########################
+uint8_t fileMode = 0;
+FILE **files = NULL;
+
+void writeToFile(uint32_t num, uint32_t x, uint32_t y, float r, float g, float b) {
+	FILE *f = files[num];
+	fwrite(&x, sizeof(x), 1, f);
+	fwrite(&y, sizeof(y), 1, f);
+	fwrite(&r, sizeof(r), 1, f);
+	fwrite(&g, sizeof(g), 1, f);
+	fwrite(&b, sizeof(b), 1, f);
+}
+
+//################File########################
 
 //###############Thread########################
 void renderImage(screenTiles *tile, uint32_t threadNum);
@@ -107,6 +115,7 @@ screenTiles *tiles = NULL;
 
 void cleanMemory() {
 	free(tiles);
+	free(files);
 	tiles = NULL;
 	free(thread_args);
 	thread_args = NULL;
@@ -119,12 +128,16 @@ void cleanMemory() {
 	}
 }
 
+void waitForThreads() {
+	for (int i=0; i<numThreads; ++i) {
+		pthread_join(threads[i], NULL);
+	}	
+}
+
 void stopThreads() {
 	threadStop = 1;
 	if(threads!= NULL) {
-		for (int i=0; i<numThreads; ++i) {
-			pthread_join(threads[i], NULL);
-		}	
+		waitForThreads();
 	}
 	threadStop = 0;
 }
@@ -132,11 +145,22 @@ void stopThreads() {
 void *ThreadCode(void *argument)
 {
 	uint32_t tid;
-	
 	tid = *((int *) argument);
 	printf("Thread %i gestartet\n", tid);
+	
+	if (fileMode) {
+		//file oeffnen
+		char buf[255];
+		snprintf(buf, 255, "%d.png", tid);
+		files[tid] = fopen(buf,"w");
+	}	
+
 	renderImage(&(tiles[tid]),tid);
 	
+	//file schliessen
+	if (fileMode) {
+		fclose(files[tid]);
+	}
 	return NULL;
 }
 
@@ -144,6 +168,7 @@ void startThreads() {
 	stopThreads();
 	cleanMemory();
 	threadStop = 0;
+	files = calloc(numThreads, sizeof(FILE));
 	threads = calloc(numThreads, sizeof(pthread_t));
 	thread_args = calloc(numThreads, sizeof(uint32_t));
 	pixelListHeads = calloc(numThreads, sizeof(pixelHead));
@@ -177,11 +202,12 @@ void startThreads() {
 }
 
 //###############Thread########################
-
-void init() {
+void initGL() {
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glDisable(GL_DEPTH_TEST);
-	
+}
+
+void init() {
 	mpf_init2(mandelRange.minRe,gmpBit);
 	mpf_init2(mandelRange.maxRe,gmpBit);
 	mpf_init2(mandelRange.minIm,gmpBit);
@@ -487,29 +513,36 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 				mpf_add(tmp, z_re2, z_im2);
 				if (mpf_cmp_ui(tmp,4) > 0) {
 					isInside = 0;
+					float red;
+					float green;
+					float blue;
 					//#############################################################
-					pixelListPtr pointPtr = createPixelElement();
 					if (n <= maxIterations / 2 - 1) {
 						//blackToRed
 						float full = (maxIterations / 2 - 1);
 						float r = ((n * 100) / full) / 100;
-						//						glColor3f(r, 0.0f, 0.0f);
-						pointPtr->red = r;
-						pointPtr->green = 0.0f;
-						pointPtr->blue = 0.0f;						
+						red = r;
+						green = 0.0f;
+						blue = 0.0f;						
 					} else if (n >= maxIterations / 2 && n <= maxIterations - 1) {
 						//redToWhite
 						float full = maxIterations - 1;
 						float r = ((n * 100) / full) / 100;
-						pointPtr->red = 1.0f;
-						pointPtr->green = r;
-						pointPtr->blue = r;						
-						//						glColor3f(1.0f, r, r);
+						red = 1.0f;
+						green = r;
+						blue = r;						
 					}
-					//					glVertex2f(x,y);
-					pointPtr->x = x;
-					pointPtr->y = y;
-					insertInto(&pixelListHeads[threadNum], pointPtr);
+					if (fileMode) {
+						writeToFile(threadNum, x,y,red,green,blue);
+					} else {
+						pixelListPtr pointPtr = createPixelElement();
+						pointPtr->x = x;
+						pointPtr->y = y;
+						pointPtr->red = red;
+						pointPtr->green = green;
+						pointPtr->blue = blue;					
+						insertInto(&pixelListHeads[threadNum], pointPtr);
+					}
 					//#############################################################
 					break;
 				}
@@ -528,13 +561,17 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 				}
 			}
 			if (isInside) {
-				pixelListPtr pointPtr = createPixelElement();
-				pointPtr->red = 0.0f;
-				pointPtr->green = 0.0f;
-				pointPtr->blue = 0.0f;						
-				pointPtr->x = x;
-				pointPtr->y = y;
-				insertInto(&pixelListHeads[threadNum], pointPtr);
+				if (fileMode) {
+					writeToFile(threadNum, x,y,0.0f,0.0f,0.0f);
+				} else {
+					pixelListPtr pointPtr = createPixelElement();
+					pointPtr->red = 0.0f;
+					pointPtr->green = 0.0f;
+					pointPtr->blue = 0.0f;						
+					pointPtr->x = x;
+					pointPtr->y = y;
+					insertInto(&pixelListHeads[threadNum], pointPtr);
+				}
 			}
 		}
 	}
@@ -599,18 +636,28 @@ void reshape(int32_t w, int32_t h)
 	restart();
 }
 
-int main(int32_t argc, char* argv[]) {
-	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
-	glutInitWindowSize(480, 480);
-	glutCreateWindow("Mandelbrot");	
+int main(int argc, char* argv[]) {
 	init();
 	atexit(freeMem);
-	glutKeyboardFunc(keyboard);
-	glutMouseFunc(mouse);
-	glutDisplayFunc(render);
-	glutIdleFunc(repaint);
-	glutReshapeFunc(reshape);
-	glutMainLoop();	
+	if(argc <= 1) { // rendern zu OpenGL
+		fileMode = 0;
+		glutInit(&argc, argv);
+		glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
+		glutInitWindowSize(480, 480);
+		glutCreateWindow("Mandelbrot");	
+		initGL();
+		glutKeyboardFunc(keyboard);
+		glutMouseFunc(mouse);
+		glutDisplayFunc(render);
+		glutIdleFunc(repaint);
+		glutReshapeFunc(reshape);
+		glutMainLoop();
+	} else { // rendern zur Datei
+		fileMode = 1;
+		sizeX = 1000;
+		sizeY = 1000;
+		startThreads();
+		waitForThreads();
+	}
 	return EXIT_SUCCESS;	
 }
