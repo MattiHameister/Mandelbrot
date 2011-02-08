@@ -111,7 +111,7 @@ void writeToFile(uint32_t num, uint32_t x, uint32_t y, float r, float g, float b
 //###############Thread########################
 void renderImage(screenTiles *tile, uint32_t threadNum);
 
-uint32_t numThreads = 16;
+uint32_t numThreads = 8;
 pthread_t *threads = NULL;
 uint32_t *thread_args  = NULL;
 pixelHead *pixelListHeads  = NULL;
@@ -545,17 +545,17 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 					if (n <= maxIterations / 2 - 1) {
 						//blackToRed
 						float full = (maxIterations / 2 - 1);
-						float r = ((n * 100) / full) / 100;
-						red = r;
-						green = 0.0f;
+						float f = ((n * 100) / full) / 100;
+						red = 0.0f;
+						green = f;
 						blue = 0.0f;						
 					} else if (n >= maxIterations / 2 && n <= maxIterations - 1) {
 						//redToWhite
 						float full = maxIterations - 1;
-						float r = ((n * 100) / full) / 100;
-						red = 1.0f;
-						green = r;
-						blue = r;						
+						float f = ((n * 100) / full) / 100;
+						red = f;
+						green = 1.0f;
+						blue = f;
 					}
 					if (fileMode) {
 						writeToFile(threadNum, x,y,red,green,blue);
@@ -701,8 +701,8 @@ int main(int argc, char* argv[]) {
 		glutMainLoop();
 	} else { // rendern zur Datei
 		fileMode = 1;
-		sizeX = 1000;
-		sizeY = 1000;
+		sizeX = 20000;
+		sizeY = 20000;
 		startThreads();
 		waitForThreads();
 	}
