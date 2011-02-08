@@ -151,8 +151,8 @@ void *ThreadCode(void *argument)
 	if (fileMode) {
 		//file oeffnen
 		char buf[255];
-		snprintf(buf, 255, "%d.png", tid);
-		files[tid] = fopen(buf,"w");
+		snprintf(buf, 255, "%d.xyrgb", tid);
+		files[tid] = fopen(buf,"wb");
 	}	
 
 	renderImage(&(tiles[tid]),tid);
@@ -354,10 +354,10 @@ void keyboard(uint8_t key, int32_t x, int32_t y)
 			file = fopen("minIm.val", "w");
 			mpf_out_str(file, base, 0, mandelRange.minIm);
 			fclose(file);
-			file = fopen("iter.val", "w");
+			file = fopen("iter.val", "wb");
 			fwrite(&maxIterations, sizeof(maxIterations), 1, file);
 			fclose(file);
-			file = fopen("bits.val", "w");
+			file = fopen("bits.val", "wb");
 			fwrite(&gmpBit, sizeof(gmpBit), 1, file);
 			fclose(file);
 			printf("Position gespeichert\n");
@@ -381,26 +381,26 @@ void keyboard(uint8_t key, int32_t x, int32_t y)
 				mpf_inp_str(mandelRange.minIm,file, base);
 			}
 			fclose(file);
-			file = fopen("iter.val", "r");
+			file = fopen("iter.val", "rb");
 			if (file != NULL) {
 				fread(&maxIterations, sizeof(maxIterations), 1, file);
 			}
 			fclose(file);
-			file = fopen("bits.val", "r");
+			file = fopen("bits.val", "rb");
 			if (file != NULL) {
 				fread(&gmpBit, sizeof(gmpBit), 1, file);
 			}
 			fclose(file);
 			setBits(gmpBit);
 			printf("Position geladen\n");
-			glutPostRedisplay();
+			restart();
 			break;
 			
 		case 98: //b
 			gmpBit+=1;
 			printf("Bit: %i\n",gmpBit);
 			setBits(gmpBit);
-			glutPostRedisplay();
+			restart();
 			break;
 			
 		case 99: // c
