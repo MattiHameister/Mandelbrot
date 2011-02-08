@@ -11,15 +11,19 @@
 int32_t sizeX;
 int32_t sizeY;
 
-int32_t selectZoomX;
-int32_t selectZoomY;
-int32_t selectZoomW;
-int32_t selectZoomH;
+int32_t selectZoomX=0;
+int32_t selectZoomY=0;
+int32_t selectZoomW=0;
+int32_t selectZoomH=0;
 
-int32_t selectMoveX;
-int32_t selectMoveY;
-int32_t selectMoveW;
-int32_t selectMoveH;
+int32_t selectMoveX=0;
+int32_t selectMoveY=0;
+int32_t selectMoveW=0;
+int32_t selectMoveH=0;
+
+uint32_t mousePosX=0;
+uint32_t mousePosY=0;
+uint8_t rightMouse=0;
 
 uint32_t maxIterations;
 int32_t gmpBit = 64;
@@ -106,7 +110,7 @@ void writeToFile(uint32_t num, uint32_t x, uint32_t y, float r, float g, float b
 //###############Thread########################
 void renderImage(screenTiles *tile, uint32_t threadNum);
 
-uint32_t numThreads = 8;
+uint32_t numThreads = 16;
 pthread_t *threads = NULL;
 uint32_t *thread_args  = NULL;
 pixelHead *pixelListHeads  = NULL;
@@ -421,6 +425,7 @@ void keyboard(uint8_t key, int32_t x, int32_t y)
 void mouse (int32_t button, int32_t state, int32_t x, int32_t y) {
     switch (button) {
         case GLUT_LEFT_BUTTON:
+			rightMouse=0;
             switch (state) {
 				case GLUT_DOWN:
 					selectZoomX = x;
@@ -429,12 +434,15 @@ void mouse (int32_t button, int32_t state, int32_t x, int32_t y) {
 				case GLUT_UP:
 					selectZoomW = x;
 					selectZoomH = y;
+					mousePosX = 0;
+					mousePosY = 0;
 					recalcZoom();
 					break;
 			}
             break;
 			
         case GLUT_RIGHT_BUTTON:
+			rightMouse=1;
             switch (state) {
 				case GLUT_DOWN:
 					selectMoveX = x;
@@ -443,11 +451,18 @@ void mouse (int32_t button, int32_t state, int32_t x, int32_t y) {
 				case GLUT_UP:
 					selectMoveW = x;
 					selectMoveH = y;
+					mousePosX = 0;
+					mousePosY = 0;
 					recalcView();
 					break;
 			}
             break;
     }
+}
+
+void mousemove(int x, int y) {
+	mousePosX = x;
+	mousePosY = y;
 }
 
 void renderImage(screenTiles *tile, uint32_t threadNum) {
@@ -605,11 +620,32 @@ void render(void) {
 		}
 	}
 	glEnd();
+	if (mousePosX > 0) {
+		glBegin(GL_LINES);
+		glColor3f(1.0f,1.0f,1.0f);
+		if(!rightMouse) {
+			glVertex2f(selectZoomX,selectZoomY);
+			glVertex2f(selectZoomX,mousePosY);
+			
+			glVertex2f(selectZoomX,mousePosY);
+			glVertex2f(mousePosX,mousePosY);
+			
+			glVertex2f(mousePosX,mousePosY);
+			glVertex2f(mousePosX,selectZoomY);
+
+			glVertex2f(mousePosX,selectZoomY);
+			glVertex2f(selectZoomX,selectZoomY);
+		} else {
+			glVertex2f(selectMoveX,selectMoveY);
+			glVertex2f(mousePosX,mousePosY);
+		}
+		glEnd();
+	}
 	glutSwapBuffers();
 }
 
 void repaint() {
-	sleep(1);
+	usleep(100000);
 	glutPostRedisplay();
 }
 
@@ -648,6 +684,7 @@ int main(int argc, char* argv[]) {
 		initGL();
 		glutKeyboardFunc(keyboard);
 		glutMouseFunc(mouse);
+		glutMotionFunc(mousemove);
 		glutDisplayFunc(render);
 		glutIdleFunc(repaint);
 		glutReshapeFunc(reshape);
