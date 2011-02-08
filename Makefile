@@ -1,7 +1,7 @@
 CC=/opt/local/bin/clang
 LIBS=-framework OpenGL -framework GLUT
 CFLAGS=-O2 -I/opt/local/include -Wall
-LDFLAGS=$(LIBS) -L/opt/local/lib -lgmp
+LDFLAGS=$(LIBS) -Wl,/opt/local/lib/libgmp.a
 
 MANDEL_OBJ := \
 	main.o
@@ -15,6 +15,11 @@ $(MANDEL_TARG) : $(MANDEL_OBJ)
 	$(CC) $(CFLAGS) -o $@ -c $<
 
 all: $(MANDEL_TARG)
+
+clean :
+	$(RM) $(MANDEL_TARG) $(MANDEL_OBJ)
+	$(RM) *.xyrgb
+	$(RM) *.val
 
 run : all
 	./$(MANDEL_TARG)

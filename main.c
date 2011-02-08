@@ -26,6 +26,7 @@ uint32_t mousePosY=0;
 uint8_t rightMouse=0;
 
 uint32_t maxIterations;
+uint32_t iterDelta=100;
 int32_t gmpBit = 64;
 
 typedef struct rangeTag {
@@ -342,7 +343,16 @@ void keyboard(uint8_t key, int32_t x, int32_t y)
 			break;
 			
 		case 105: // i
-			maxIterations+=100;
+			maxIterations+=iterDelta;
+			printf("Iterationen: %u\n",maxIterations);
+			restart();
+			break;
+
+		case 111: // o
+			maxIterations-=iterDelta;
+			if (maxIterations <= 0) {
+				maxIterations+=iterDelta;
+			}
 			printf("Iterationen: %u\n",maxIterations);
 			restart();
 			break;
