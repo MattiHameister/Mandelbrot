@@ -1,12 +1,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <unistd.h>
 #include <math.h>
 #include <OpenGL/gl.h>
 #include <GLUT/glut.h>
 #include <pthread.h>
-#include <gmp.h>
+//#include <gmp.h>
+#include "doubleGMP.h"
 
 int32_t sizeX;
 int32_t sizeY;
@@ -99,11 +101,18 @@ FILE **files = NULL;
 
 void writeToFile(uint32_t num, uint32_t x, uint32_t y, float r, float g, float b) {
 	FILE *f = files[num];
-	fwrite(&x, sizeof(x), 1, f);
-	fwrite(&y, sizeof(y), 1, f);
-	fwrite(&r, sizeof(r), 1, f);
-	fwrite(&g, sizeof(g), 1, f);
-	fwrite(&b, sizeof(b), 1, f);
+	//	fwrite(&x, sizeof(x), 1, f);
+	//	fwrite(&y, sizeof(y), 1, f);
+	//	fwrite(&r, sizeof(r), 1, f);
+	//	fwrite(&g, sizeof(g), 1, f);
+	//	fwrite(&b, sizeof(b), 1, f);
+	uint8_t red = 255*r;
+	uint8_t green = 255*g;
+	uint8_t blue = 255*b;
+	// TODO swappen, wenn BigEndian
+	fwrite(&blue, sizeof(blue), 1, f);
+	fwrite(&green, sizeof(green), 1, f);
+	fwrite(&red, sizeof(red), 1, f);	
 }
 
 //################File########################
@@ -121,6 +130,7 @@ screenTiles *tiles = NULL;
 void cleanMemory() {
 	free(tiles);
 	free(files);
+	free(threads);
 	tiles = NULL;
 	free(thread_args);
 	thread_args = NULL;
@@ -159,7 +169,7 @@ void *ThreadCode(void *argument)
 		snprintf(buf, 255, "%d.xyrgb", tid);
 		files[tid] = fopen(buf,"wb");
 	}	
-
+	
 	renderImage(&(tiles[tid]),tid);
 	
 	//file schliessen
@@ -180,22 +190,16 @@ void startThreads() {
 	tiles = calloc(numThreads*numThreads, sizeof(screenTiles));
 	
 	int32_t numSplit=numThreads;
-	int32_t offSetX=0;
-	//	int32_t offSetY=0;
-	int32_t dX = sizeX / numSplit;
-	//	int32_t dY = sizeY / numSplit;
+	int32_t offSetY=0;
+	int32_t dY = sizeY / numSplit;
 	int num = 0;
-	for (int32_t x = 0; x<numSplit; x++) {
-		//		for (int32_t y = 0; y<numSplit; y++) {
-		tiles[num].fromX = offSetX;
-		tiles[num].toX = offSetX+dX;
-		tiles[num].fromY = 0;
-		tiles[num].toY = sizeY;
-		//			offSetY+=dY;
+	for (int32_t y = 0; y<numSplit; y++) {
+		tiles[num].fromX = 0;
+		tiles[num].toX = sizeX;
+		tiles[num].fromY = offSetY;
+		tiles[num].toY = offSetY+dY;
+		offSetY+=dY;
 		num++;
-		//		}			
-		//		offSetY=0;
-		offSetX+=dX;
 	}
 	
 	for (int i=0; i<numThreads; i++) {
@@ -332,6 +336,42 @@ void recalcView() {
 	}
 }
 
+void loadPosition() {
+	FILE *file;
+	int32_t base = 10;
+	
+	printf("Lade Position\n");
+	file = fopen("minRe.val", "r");
+	if (file != NULL) {
+		mpf_inp_str(mandelRange.minRe, file, base);
+	}
+	
+	if (file != NULL) {
+		file = fopen("maxRe.val", "r");
+		mpf_inp_str(mandelRange.maxRe, file, base);
+	}
+	fclose(file);
+	
+	if (file != NULL) {
+		file = fopen("minIm.val", "r");
+		mpf_inp_str(mandelRange.minIm,file, base);
+	}
+	fclose(file);
+	file = fopen("iter.val", "rb");
+	if (file != NULL) {
+		fread(&maxIterations, sizeof(maxIterations), 1, file);
+	}
+	fclose(file);
+	file = fopen("bits.val", "rb");
+	if (file != NULL) {
+		fread(&gmpBit, sizeof(gmpBit), 1, file);
+		setBits(gmpBit);
+	}
+	fclose(file);
+	printf("Position geladen\n");
+	
+}
+
 void keyboard(uint8_t key, int32_t x, int32_t y)
 {
 	FILE *file;
@@ -339,6 +379,8 @@ void keyboard(uint8_t key, int32_t x, int32_t y)
 	
 	switch (key) {
 		case 27: // ESC
+			stopThreads();
+			cleanMemory();
 			exit(0);
 			break;
 			
@@ -347,7 +389,7 @@ void keyboard(uint8_t key, int32_t x, int32_t y)
 			printf("Iterationen: %u\n",maxIterations);
 			restart();
 			break;
-
+			
 		case 111: // o
 			maxIterations-=iterDelta;
 			if (maxIterations <= 0) {
@@ -378,35 +420,7 @@ void keyboard(uint8_t key, int32_t x, int32_t y)
 			break;
 			
 		case 108: // l
-			printf("Lade Position\n");
-			file = fopen("minRe.val", "r");
-			if (file != NULL) {
-				mpf_inp_str(mandelRange.minRe, file, base);
-			}
-			
-			if (file != NULL) {
-				file = fopen("maxRe.val", "r");
-				mpf_inp_str(mandelRange.maxRe, file, base);
-			}
-			fclose(file);
-			
-			if (file != NULL) {
-				file = fopen("minIm.val", "r");
-				mpf_inp_str(mandelRange.minIm,file, base);
-			}
-			fclose(file);
-			file = fopen("iter.val", "rb");
-			if (file != NULL) {
-				fread(&maxIterations, sizeof(maxIterations), 1, file);
-			}
-			fclose(file);
-			file = fopen("bits.val", "rb");
-			if (file != NULL) {
-				fread(&gmpBit, sizeof(gmpBit), 1, file);
-			}
-			fclose(file);
-			setBits(gmpBit);
-			printf("Position geladen\n");
+			loadPosition();
 			restart();
 			break;
 			
@@ -508,13 +522,14 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 	mpf_mul(tmp,tmpDiff,tmp);
 	mpf_add(mandelRange.maxIm,mandelRange.minIm,tmp);
 	//	re_factor = (maxRe - minRe) / (sizeX - 1);
-	mpf_div_ui(re_factor, tmpDiff, sX-1.0);
+	mpf_set_d(tmp, sX-1.0);
+	mpf_div(re_factor, tmpDiff, tmp);
 	//	im_factor = (maxIm - minIm) / (sizeY - 1);	
 	mpf_sub(tmpDiff,mandelRange.maxIm,mandelRange.minIm);
-	mpf_div_ui(im_factor,tmpDiff, sY-1.0);
+	mpf_set_d(tmp, sY-1.0);
+	mpf_div(im_factor,tmpDiff, tmp);
 	
 	
-	//	glBegin(GL_POINTS);
 	for (int32_t y = tile->fromY; y < tile->toY; ++y) {
 		//c_im = maxIm - y * im_factor;
 		mpf_mul_ui(tmpDiff, im_factor, y);
@@ -547,15 +562,15 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 						float full = (maxIterations / 2 - 1);
 						float f = ((n * 100) / full) / 100;
 						red = 0.0f;
-						green = f;
-						blue = 0.0f;						
+						green = 0.0f;
+						blue = f;						
 					} else if (n >= maxIterations / 2 && n <= maxIterations - 1) {
 						//redToWhite
 						float full = maxIterations - 1;
 						float f = ((n * 100) / full) / 100;
 						red = f;
-						green = 1.0f;
-						blue = f;
+						green = f;
+						blue = 1.0f;
 					}
 					if (fileMode) {
 						writeToFile(threadNum, x,y,red,green,blue);
@@ -642,7 +657,7 @@ void render(void) {
 			
 			glVertex2f(mousePosX,mousePosY);
 			glVertex2f(mousePosX,selectZoomY);
-
+			
 			glVertex2f(mousePosX,selectZoomY);
 			glVertex2f(selectZoomX,selectZoomY);
 		} else {
@@ -682,6 +697,77 @@ void reshape(int32_t w, int32_t h)
 	restart();
 }
 
+void tgaSaveHeader(FILE *file, short int width, short int height, unsigned char pixelDepth) {
+	unsigned char cGarbage = 0, type, mode;
+	short int iGarbage = 0;
+	
+	mode = pixelDepth / 8;
+	if ((pixelDepth == 24) || (pixelDepth == 32))
+		type = 2;
+	else
+		type = 3;
+	
+	fwrite(&cGarbage, sizeof(unsigned char), 1, file);
+	fwrite(&cGarbage, sizeof(unsigned char), 1, file);
+	
+	fwrite(&type, sizeof(unsigned char), 1, file);
+	
+	fwrite(&iGarbage, sizeof(short int), 1, file);
+	fwrite(&iGarbage, sizeof(short int), 1, file);
+	fwrite(&cGarbage, sizeof(unsigned char), 1, file);
+	fwrite(&iGarbage, sizeof(short int), 1, file);
+	fwrite(&iGarbage, sizeof(short int), 1, file);
+	
+	fwrite(&width, sizeof(short int), 1, file);
+	fwrite(&height, sizeof(short int), 1, file);
+	fwrite(&pixelDepth, sizeof(unsigned char), 1, file);
+	
+	fwrite(&cGarbage, sizeof(unsigned char), 1, file);
+}
+
+#define BUFFER_SIZE 32768
+
+// Einzelne Threads schrieben TGA Daten
+// Diese muessen jetzt nur noch zusammengefuegt werden
+void writeTGA() {
+	printf("speichere TGA\n");
+	FILE *file = fopen("Ergebnis.tga", "wb");
+	if (file != NULL) {
+		tgaSaveHeader(file, sizeX,sizeY, 24);
+		uint8_t counter = 0;
+		for(int i=0; i<numThreads; i++) {
+			char buf[255];
+			snprintf(buf, 255, "%d.xyrgb", i);
+			printf("verarbeite Datei %s\n",buf);
+			FILE *result = fopen(buf, "rb");
+			if(result != NULL) {
+				char buffer[BUFFER_SIZE];
+				rewind(result);
+				uint32_t read = 0;
+				uint32_t write = 0;
+				do {
+					read = fread(&buffer, 1, BUFFER_SIZE, result);
+					if(read > 0) {
+						write = fwrite(buffer, 1, read, file);
+						if(read != write) {
+							printf("Es ist ein Fehler aufgetreten %d, %d\n",read, write);
+						}
+					}
+					// Datei ab und zu mal auf Festplatte schreiben
+					counter++;
+					if (counter >= 100) {
+						counter = 0;
+						fflush(file);
+					}
+				} while (read > 0);
+			}
+			fclose(result);
+			remove(buf);
+		}	
+	}
+	fclose(file);
+}
+
 int main(int argc, char* argv[]) {
 	init();
 	atexit(freeMem);
@@ -701,10 +787,13 @@ int main(int argc, char* argv[]) {
 		glutMainLoop();
 	} else { // rendern zur Datei
 		fileMode = 1;
-		sizeX = 20000;
-		sizeY = 20000;
+		sizeX = 1920;
+		sizeY = 1200;
+		maxIterations=500;
+		loadPosition();
 		startThreads();
 		waitForThreads();
+		writeTGA();
 	}
 	return EXIT_SUCCESS;	
 }
