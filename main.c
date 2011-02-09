@@ -7,8 +7,8 @@
 #include <OpenGL/gl.h>
 #include <GLUT/glut.h>
 #include <pthread.h>
-//#include <gmp.h>
-#include "doubleGMP.h"
+#include <gmp.h>
+//#include "doubleGMP.h"
 
 int32_t sizeX;
 int32_t sizeY;
@@ -380,7 +380,6 @@ void keyboard(uint8_t key, int32_t x, int32_t y)
 	switch (key) {
 		case 27: // ESC
 			stopThreads();
-			cleanMemory();
 			exit(0);
 			break;
 			
@@ -553,24 +552,24 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 				mpf_add(tmp, z_re2, z_im2);
 				if (mpf_cmp_ui(tmp,4) > 0) {
 					isInside = 0;
-					float red;
-					float green;
-					float blue;
+					float red = 0.0f;
+					float green = 0.0f;
+					float blue = 0.0f;
 					//#############################################################
 					if (n <= maxIterations / 2 - 1) {
 						//blackToRed
 						float full = (maxIterations / 2 - 1);
 						float f = ((n * 100) / full) / 100;
-						red = 0.0f;
+						red = f;
 						green = 0.0f;
-						blue = f;						
+						blue = 0.0f;						
 					} else if (n >= maxIterations / 2 && n <= maxIterations - 1) {
 						//redToWhite
 						float full = maxIterations - 1;
 						float f = ((n * 100) / full) / 100;
-						red = f;
+						red = 1.0f;
 						green = f;
-						blue = 1.0f;
+						blue = f;
 					}
 					if (fileMode) {
 						writeToFile(threadNum, x,y,red,green,blue);
@@ -599,6 +598,7 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 				if(threadStop == 1) {
 					return;
 				}
+				
 			}
 			if (isInside) {
 				if (fileMode) {
@@ -787,10 +787,10 @@ int main(int argc, char* argv[]) {
 		glutMainLoop();
 	} else { // rendern zur Datei
 		fileMode = 1;
-		sizeX = 1920;
-		sizeY = 1200;
+		sizeX = 50000;
+		sizeY = 50000;
 		maxIterations=500;
-		loadPosition();
+//		loadPosition();
 		startThreads();
 		waitForThreads();
 		writeTGA();
