@@ -27,8 +27,8 @@ uint32_t mousePosX=0;
 uint32_t mousePosY=0;
 uint8_t rightMouse=0;
 
-uint32_t maxIterations;
-uint32_t iterDelta=100;
+uint32_t maxIterations=100;
+uint32_t iterDelta=25;
 int32_t gmpBit = 64;
 
 typedef struct rangeTag {
@@ -51,9 +51,9 @@ typedef struct pixelElementTag *pixelListPtr;
 typedef struct pixelElementTag {
 	int32_t x;
 	int32_t y;
-	float red;
-	float green;
-	float blue;
+	uint8_t red;
+	uint8_t green;
+	uint8_t blue;
 	pixelListPtr next;
 } pixelElement;
 
@@ -99,16 +99,16 @@ void deletePixelList(pixelHeadPtr head) {
 uint8_t fileMode = 0;
 FILE **files = NULL;
 
-void writeToFile(uint32_t num, uint32_t x, uint32_t y, float r, float g, float b) {
+void writeToFile(uint32_t num, uint32_t x, uint32_t y, uint8_t red, uint8_t green, uint8_t blue) {
 	FILE *f = files[num];
 	//	fwrite(&x, sizeof(x), 1, f);
 	//	fwrite(&y, sizeof(y), 1, f);
 	//	fwrite(&r, sizeof(r), 1, f);
 	//	fwrite(&g, sizeof(g), 1, f);
 	//	fwrite(&b, sizeof(b), 1, f);
-	uint8_t red = 255*r;
-	uint8_t green = 255*g;
-	uint8_t blue = 255*b;
+	//	uint8_t red = 255*r;
+	//	uint8_t green = 255*g;
+	//	uint8_t blue = 255*b;
 	// TODO swappen, wenn BigEndian
 	fwrite(&blue, sizeof(blue), 1, f);
 	fwrite(&green, sizeof(green), 1, f);
@@ -192,12 +192,17 @@ void startThreads() {
 	int32_t numSplit=numThreads;
 	int32_t offSetY=0;
 	int32_t dY = sizeY / numSplit;
+	int32_t rest = sizeY % numSplit;
 	int num = 0;
 	for (int32_t y = 0; y<numSplit; y++) {
 		tiles[num].fromX = 0;
 		tiles[num].toX = sizeX;
 		tiles[num].fromY = offSetY;
 		tiles[num].toY = offSetY+dY;
+		// Wenn ein Teilungsrest da ist, muss der aufaddiert werden, sonst fehlt was vom Bild
+		if(y == numSplit-1) {
+			tiles[num].toY += rest;
+		}
 		offSetY+=dY;
 		num++;
 	}
@@ -225,8 +230,6 @@ void init() {
 	mpf_set_d(mandelRange.minRe,-2.0);
 	mpf_set_d(mandelRange.maxRe,1.0);
 	mpf_set_d(mandelRange.minIm,-1.2);
-	
-	maxIterations = 100;
 }
 
 void setBits(int32_t bits) {
@@ -488,6 +491,271 @@ void mousemove(int x, int y) {
 	mousePosY = y;
 }
 
+void savePixel(uint32_t threadNum, uint32_t x, uint32_t y, uint8_t red, uint8_t green, uint8_t blue) {
+	if (fileMode) {
+		writeToFile(threadNum, x, y, red, green, blue);
+	} else {
+		pixelListPtr pointPtr = createPixelElement();
+		pointPtr->x = x;
+		pointPtr->y = y;
+		pointPtr->red = red;
+		pointPtr->green = green;
+		pointPtr->blue = blue;
+		insertInto(&pixelListHeads[threadNum], pointPtr);
+	}
+}
+
+//void renderPixel(uint32_t x, uint32_t y, uint32_t threadNum, mpf_t z_re, mpf_t z_im, mpf_t z_re2, mpf_t z_im2, mpf_t c_re, mpf_t c_im, mpf_t tmp, uint8_t *red, uint8_t *green, uint8_t *blue) {
+//	mpf_set(z_re,c_re);
+//	mpf_set(z_im,c_im);
+//	
+//	int32_t isInside = 1;
+//	for (uint32_t n = 0; n < maxIterations; ++n) {
+//		//Z_re2 = Z_re * Z_re;
+//		mpf_mul(z_re2,z_re,z_re);
+//		//Z_im2 = Z_im * Z_im;
+//		mpf_mul(z_im2,z_im,z_im);
+//		
+//		//Z_re2 + Z_im2 > 4
+//		mpf_add(tmp, z_re2, z_im2);
+//		if (mpf_cmp_ui(tmp,4) > 0) {
+//			isInside = 0;
+//			*red = 0.0f;
+//			*green = 0.0f;
+//			*blue = 0.0f;
+//			//#############################################################
+//			if (n <= maxIterations / 2 - 1) {
+//				//blackToRed
+//				float full = (maxIterations / 2 - 1);
+//				float f = (((n * 100) / full) / 100)*255;
+//				*red = 0;
+//				*green = 0;
+//				*blue = f;						
+//			} else if (n >= maxIterations / 2 && n <= maxIterations - 1) {
+//				//redToWhite
+//				float full = maxIterations - 1;
+//				float f = (((n * 100) / full) / 100)*255;
+//				*red = f;
+//				*green = f;
+//				*blue = 255;
+//			}
+//			savePixel(threadNum, x, y, *red, *green, *blue);
+//			//#############################################################
+//			break;
+//		}
+//		//Z_im = 2 * Z_re * Z_im + c_im;
+//		mpf_mul_ui(tmp, z_re, 2);
+//		mpf_mul(tmp,tmp,z_im);
+//		mpf_add(z_im,tmp,c_im);
+//		
+//		//Z_re = Z_re2 - Z_im2 + c_re;
+//		mpf_sub(tmp,z_re2,z_im2);
+//		mpf_add(z_re,tmp,c_re);
+//		
+//		// Thread hat den Stop-Befehl bekommen.
+//		if(threadStop == 1) {
+//			return;
+//		}
+//		
+//	}
+//	if (isInside) {
+//		savePixel(threadNum, x, y, 0, 0, 0);
+//	}
+//}
+
+//void calcCRe(mpf_t tmpDiff, mpf_t re_factor, uint32_t x, mpf_t minRe, mpf_t c_re) {
+//	mpf_mul_ui(tmpDiff, re_factor, x);
+//	mpf_add(c_re, minRe, tmpDiff);
+//}
+//
+//void calcCIm(mpf_t tmpDiff, mpf_t im_factor, uint32_t y, mpf_t maxIm, mpf_t c_im) {
+//	mpf_mul_ui(tmpDiff, im_factor, y);
+//	mpf_sub(c_im, maxIm, tmpDiff);
+//}
+
+//void renderImage(screenTiles *tile, uint32_t threadNum) {
+//	printf("Rendere: %ix%ix%ix%i\n",tile->fromX,tile->toX,tile->fromY,tile->toY);
+//	
+//	mpf_t tmpDiff;
+//	mpf_t tmp;
+//	mpf_t re_factor;
+//	mpf_t im_factor;
+//	mpf_t c_im;
+//	mpf_t c_re;
+//	mpf_t z_re;
+//	mpf_t z_im;
+//	mpf_t z_re2;
+//	mpf_t z_im2;
+//	
+//	mpf_init2(tmpDiff,gmpBit);
+//	mpf_init2(tmp,gmpBit);
+//	mpf_init2(re_factor,gmpBit);
+//	mpf_init2(im_factor,gmpBit);
+//	mpf_init2(c_im,gmpBit);
+//	mpf_init2(c_re,gmpBit);
+//	mpf_init2(z_im,gmpBit);
+//	mpf_init2(z_re,gmpBit);
+//	mpf_init2(z_im2,gmpBit);
+//	mpf_init2(z_re2,gmpBit);
+//	
+//	int pixelX = tile->toX - tile->fromX;
+//	int pixelY = tile->toY - tile->fromY;
+//	
+//	int splitX = 10;//sizeX / 100;
+//	int splitY = 10;//pixelY / numThreads/2;
+//	int boxPixelCountX = pixelX / splitX;
+//	int boxPixelCountXLeft = pixelX % splitX;
+//	int boxPixelCountY = pixelY / splitY;
+//	int boxPixelCountYLeft = pixelY % splitY;
+//	printf("SplitX %i, SplitY %i, Boxes: %i+%i | %i+%i\n",splitX, splitY, boxPixelCountX,boxPixelCountXLeft,boxPixelCountY,boxPixelCountYLeft);
+//	
+//	// Einteilung in einzelne Bereiche
+//	int count = splitX*splitY;
+//	screenTiles *boxes = calloc(count, sizeof(screenTiles));
+//	
+//	uint32_t xOffset = 0;
+//	uint32_t yOffset = 0;
+//	int box = 0;
+//	for (int y = 0; y < splitY; y++) {
+//		for (int x = 0; x < splitX; x++) {
+//			if(box >= count) {
+//				printf("SPEICHERUEBERLAUF!%i <> %i\n", box, count);
+//				exit(1);
+//			}
+//			boxes[box].fromX = tile->fromX + xOffset;
+//			boxes[box].toX = boxes[box].fromX + boxPixelCountX;
+//			if(x == splitX-1) {
+//				boxes[box].toX += boxPixelCountXLeft;
+//			}
+//			
+//			boxes[box].fromY = tile->fromY + yOffset;
+//			boxes[box].toY = boxes[box].fromY + boxPixelCountY;
+//			if(y == splitY-1) {
+//				boxes[box].toY += boxPixelCountYLeft;
+//			}
+//			printf("BOX: %i|%i|%i|%i\n",boxes[box].fromX,boxes[box].toX,boxes[box].fromY,boxes[box].toY);
+//			xOffset += boxPixelCountX;
+//			box++;
+//		}
+//		yOffset += boxPixelCountY;
+//		xOffset = 0;
+//	}
+//	
+//	mpf_sub(tmpDiff,mandelRange.maxRe,mandelRange.minRe);
+//	
+//	long double sX = sizeX;
+//	long double sY = sizeY;
+//	mpf_set_d(tmp, sY/sX);
+//	//	maxIm = minIm + (maxRe - minRe) * sizeY / sizeX;
+//	mpf_mul(tmp,tmpDiff,tmp);
+//	mpf_add(mandelRange.maxIm,mandelRange.minIm,tmp);
+//	//	re_factor = (maxRe - minRe) / (sizeX - 1);
+//	mpf_set_d(tmp, sX-1.0);
+//	mpf_div(re_factor, tmpDiff, tmp);
+//	//	im_factor = (maxIm - minIm) / (sizeY - 1);	
+//	mpf_sub(tmpDiff,mandelRange.maxIm,mandelRange.minIm);
+//	mpf_set_d(tmp, sY-1.0);
+//	mpf_div(im_factor,tmpDiff, tmp);
+//	
+//	uint8_t red = 0;
+//	uint8_t green = 0;
+//	uint8_t blue = 0;
+//	
+//	uint32_t lead = 0;
+//	
+//	for(int b = 0; b<count; b++) {
+//		uint8_t finished = 0;
+//		while (!finished) {
+//			int xk = boxes[b].fromX+lead;
+//			if((boxes[b].toY-lead) - (boxes[b].fromX+lead) < 6) {
+//				calcCRe(tmpDiff, re_factor, xk, mandelRange.minRe, c_re);		
+//				for(uint32_t y = boxes[b].fromY+lead; y < boxes[b].toY-lead; y++) {	
+//					calcCIm(tmpDiff, im_factor, y, mandelRange.maxIm, c_im);			
+//					renderPixel(xk, y, threadNum, z_re, z_im, z_re2, z_im2, c_re, c_im, tmp, &red, &green, &blue);
+//				}
+//				
+//				xk = boxes[b].toX-lead-1;
+//				calcCRe(tmpDiff, re_factor, xk, mandelRange.minRe, c_re);		
+//				for(uint32_t y = boxes[b].fromY+lead; y < boxes[b].toY-lead; y++) {			
+//					calcCIm(tmpDiff, im_factor, y, mandelRange.maxIm, c_im);			
+//					renderPixel(xk, y, threadNum, z_re, z_im, z_re2, z_im2, c_re, c_im, tmp, &red, &green, &blue);
+//				}
+//				
+//				int yk = boxes[b].fromY+lead;
+//				calcCIm(tmpDiff, im_factor, yk, mandelRange.maxIm, c_im);			
+//				for(uint32_t x = boxes[b].fromX+lead+1; x < boxes[b].toX-lead-1; x++) {			
+//					calcCRe(tmpDiff, re_factor, x, mandelRange.minRe, c_re);		
+//					renderPixel(x, yk, threadNum, z_re, z_im, z_re2, z_im2, c_re, c_im, tmp, &red, &green, &blue);
+//				}
+//				
+//				yk = boxes[b].toY-lead-1;
+//				calcCIm(tmpDiff, im_factor, yk, mandelRange.maxIm, c_im);			
+//				for(uint32_t x = boxes[b].fromX+lead+1; x < boxes[b].toX-lead-1; x++) {			
+//					calcCRe(tmpDiff, re_factor, x, mandelRange.minRe, c_re);		
+//					renderPixel(x, yk, threadNum, z_re, z_im, z_re2, z_im2, c_re, c_im, tmp, &red, &green, &blue);
+//				}
+//				
+//				lead++;
+//				//			printf("%i>=%i\n",lead*2+boxes[b].fromX,boxes[b].toX-lead);
+//				if(lead*2+boxes[b].fromX>=boxes[b].toX-lead) {
+//					finished = 1;
+//				}
+//			} else {
+//				for(int b = 0; b<count; b++) {
+//					for (int32_t y = boxes[b].fromY+lead; y < boxes[b].toY-lead; ++y) {
+//						//c_im = maxIm - y * im_factor;
+//						calcCIm(tmpDiff, im_factor, y, mandelRange.maxIm, c_im);			
+//						for (int32_t x = boxes[b].fromX+lead; x < boxes[b].toX-lead; ++x) {
+//							printf("HAAAAAAAALLLLOOO\n%ix%i",x,y);
+//							//c_re = minRe + x * re_factor;
+//							calcCRe(tmpDiff, re_factor, x, mandelRange.minRe, c_re);		
+//							
+//							renderPixel(x, y, threadNum, z_re, z_im, z_re2, z_im2, c_re, c_im, tmp, &red, &green, &blue);
+//						}
+//					}
+//				}	
+//				finished = 1;
+//			}
+//			
+//			if(threadStop == 1) {
+//				break;
+//			}
+//		}
+//		lead = 0;
+//		if(threadStop == 1) {
+//			break;
+//		}
+//	}
+//	
+//	//	for(int b = 0; b<count; b++) {
+//	//		for (int32_t y = boxes[b].fromY; y < boxes[b].toY; ++y) {
+//	//			//c_im = maxIm - y * im_factor;
+//	//			mpf_mul_ui(tmpDiff, im_factor, y);
+//	//			mpf_sub(c_im,mandelRange.maxIm,tmpDiff);
+//	//			for (int32_t x = boxes[b].fromX; x < boxes[b].toX; ++x) {
+//	//				//c_re = minRe + x * re_factor;
+//	//				mpf_mul_ui(tmpDiff, re_factor, x);
+//	//				mpf_add(c_re,mandelRange.minRe,tmpDiff);
+//	//				
+//	//				renderPixel(x, y, threadNum, z_re, z_im, z_re2, z_im2, c_re, c_im, tmp, &red, &green, &blue);
+//	//			}
+//	//		}
+//	//	}
+//	
+//	free(boxes);
+//	mpf_clear(c_im);
+//	mpf_clear(c_re);
+//	mpf_clear(z_im);
+//	mpf_clear(z_re);
+//	mpf_clear(z_im2);
+//	mpf_clear(z_re2);
+//	mpf_clear(re_factor);
+//	mpf_clear(im_factor);
+//	mpf_clear(tmpDiff);
+//	mpf_clear(tmp);
+//	printf("Fertig mit: %ix%ix%ix%i\n",tile->fromX,tile->toX,tile->fromY,tile->toY);
+//}
+
 void renderImage(screenTiles *tile, uint32_t threadNum) {
 	printf("Rendere: %ix%ix%ix%i\n",tile->fromX,tile->toX,tile->fromY,tile->toY);
 	mpf_t tmpDiff;
@@ -552,36 +820,26 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 				mpf_add(tmp, z_re2, z_im2);
 				if (mpf_cmp_ui(tmp,4) > 0) {
 					isInside = 0;
-					float red = 0.0f;
-					float green = 0.0f;
-					float blue = 0.0f;
+					uint8_t red = 0;
+					uint8_t green = 0;
+					uint8_t blue = 0;
 					//#############################################################
 					if (n <= maxIterations / 2 - 1) {
 						//blackToRed
 						float full = (maxIterations / 2 - 1);
-						float f = ((n * 100) / full) / 100;
+						float f = (((n * 100) / full) / 100)*255;
 						red = f;
-						green = 0.0f;
-						blue = 0.0f;						
+						green = 0;
+						blue = 0;						
 					} else if (n >= maxIterations / 2 && n <= maxIterations - 1) {
 						//redToWhite
 						float full = maxIterations - 1;
-						float f = ((n * 100) / full) / 100;
-						red = 1.0f;
+						float f = (((n * 100) / full) / 100)*255;
+						red = 255;
 						green = f;
 						blue = f;
 					}
-					if (fileMode) {
-						writeToFile(threadNum, x,y,red,green,blue);
-					} else {
-						pixelListPtr pointPtr = createPixelElement();
-						pointPtr->x = x;
-						pointPtr->y = y;
-						pointPtr->red = red;
-						pointPtr->green = green;
-						pointPtr->blue = blue;					
-						insertInto(&pixelListHeads[threadNum], pointPtr);
-					}
+					savePixel(threadNum, x, y, red, green, blue);
 					//#############################################################
 					break;
 				}
@@ -601,17 +859,7 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 				
 			}
 			if (isInside) {
-				if (fileMode) {
-					writeToFile(threadNum, x,y,0.0f,0.0f,0.0f);
-				} else {
-					pixelListPtr pointPtr = createPixelElement();
-					pointPtr->red = 0.0f;
-					pointPtr->green = 0.0f;
-					pointPtr->blue = 0.0f;						
-					pointPtr->x = x;
-					pointPtr->y = y;
-					insertInto(&pixelListHeads[threadNum], pointPtr);
-				}
+				savePixel(threadNum, x, y, 0, 0, 0);
 			}
 		}
 	}
@@ -626,7 +874,6 @@ void renderImage(screenTiles *tile, uint32_t threadNum) {
 	mpf_clear(tmpDiff);
 	mpf_clear(tmp);
 	printf("Fertig mit: %ix%ix%ix%i\n",tile->fromX,tile->toX,tile->fromY,tile->toY);
-	
 }
 
 void render(void) {
@@ -638,7 +885,10 @@ void render(void) {
 		if(pixelListHeads != NULL) {
 			pixelListPtr *p = &(pixelListHeads[i].first);
 			while ((*p) != NULL) {
-				glColor3f((*p)->red, (*p)->green, (*p)->blue);
+				float r = (*p)->red / 255.0f;
+				float g = (*p)->green / 255.0f;
+				float b = (*p)->blue / 255.0f;
+				glColor3f(r, g, b);
 				glVertex2f((*p)->x,(*p)->y);
 				p = &(*p)->next;
 			}
@@ -685,6 +935,7 @@ void freeMem() {
 
 void reshape(int32_t w, int32_t h)
 {
+	stopThreads();
 	sizeX = w;
 	sizeY = h;
 	glViewport(0, 0, w, h);
@@ -775,7 +1026,7 @@ int main(int argc, char* argv[]) {
 		fileMode = 0;
 		glutInit(&argc, argv);
 		glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
-		glutInitWindowSize(480, 480);
+		glutInitWindowSize(633, 641);
 		glutCreateWindow("Mandelbrot");	
 		initGL();
 		glutKeyboardFunc(keyboard);
@@ -787,10 +1038,10 @@ int main(int argc, char* argv[]) {
 		glutMainLoop();
 	} else { // rendern zur Datei
 		fileMode = 1;
-		sizeX = 50000;
-		sizeY = 50000;
+		sizeX = 1024;
+		sizeY = 1024;
 		maxIterations=500;
-//		loadPosition();
+		//		loadPosition();
 		startThreads();
 		waitForThreads();
 		writeTGA();

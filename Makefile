@@ -4,6 +4,7 @@ CFLAGS=-O2 -I/opt/local/include -Wall
 LDFLAGS=$(LIBS) -Wl,/opt/local/lib/libgmp.a
 
 MANDEL_OBJ := \
+	doubleGMP.o \
 	main.o
 
 MANDEL_TARG := mandelbrot
@@ -19,7 +20,9 @@ all: $(MANDEL_TARG)
 clean :
 	$(RM) $(MANDEL_TARG) $(MANDEL_OBJ)
 	$(RM) *.xyrgb
-	$(RM) *.val
 
+clean-all : clean
+	$(RM) *.val
+	
 run : all
 	./$(MANDEL_TARG)
